@@ -1,0 +1,50 @@
+jira:
+  base-url: https://your-domain.atlassian.net
+  email: your-email
+  api-token: your-token
+  project-key: ABC
+  story-points-field: customfield_10016
+
+github:
+  token: your-github-token
+  repo-owner: your-org
+  repo-name: your-repo
+
+feature:
+  persistence-enabled: false
+
+# Spring Boot Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,caches,env
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name:engineering-metrics-service}
+  health:
+    defaults:
+      enabled: true
+
+# Application Info
+spring:
+  application:
+    name: engineering-metrics-service
+
+info:
+  app:
+    name: Engineering Metrics Service
+    description: Sprint and developer metrics from Jira and GitHub
+    version: 1.0.0
+
+

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- 
+        Exclude EI_EXPOSE_REP and EI_EXPOSE_REP2 warnings for DTO and model classes.
+        These classes are designed for JSON serialization/deserialization in a Spring Boot REST API.
+        Exposing internal representation is acceptable and expected for these classes.
+    -->
+    
+    <!-- Exclude EI_EXPOSE_REP warnings for DTO classes -->
+    <Match>
+        <Class name="~com\.example\.metrics\.model\.dto\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    
+    <!-- Exclude EI_EXPOSE_REP warnings for Jira model classes -->
+    <Match>
+        <Class name="~com\.example\.metrics\.model\.jira\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    
+    <!-- Exclude EI_EXPOSE_REP2 for RestClient fields in service classes -->
+    <Match>
+        <Class name="com.example.metrics.service.GitHubService"/>
+        <Field name="githubRestClient"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    
+    <Match>
+        <Class name="com.example.metrics.service.JiraService"/>
+        <Field name="jiraRestClient"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>
+
