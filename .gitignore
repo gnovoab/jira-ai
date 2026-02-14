@@ -35,3 +35,9 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Jira Session Credentials ###
+tools/.jira-session
+tools/jira-page-*.json
+tools/jira-export-*.json
+tools/*.class

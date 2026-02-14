@@ -9,11 +9,20 @@ import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Fields {
+    private String summary;
     private Assignee assignee;
     private IssueType issuetype;
     private Priority priority;
     private Status status;
     private final Map<String, Object> customFields = new HashMap<>();
+
+    public String getSummary() {
+        return summary;
+    }
+
+    public void setSummary(String summary) {
+        this.summary = summary;
+    }
 
     public Assignee getAssignee() {
         return assignee;

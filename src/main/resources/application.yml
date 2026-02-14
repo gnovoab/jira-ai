@@ -1,14 +1,6 @@
-jira:
-  base-url: https://your-domain.atlassian.net
-  email: your-email
-  api-token: your-token
-  project-key: ABC
-  story-points-field: customfield_10016
-
-github:
-  token: your-github-token
-  repo-owner: your-org
-  repo-name: your-repo
+# File-based Jira data ingestion
+# Data is loaded from jira-sprint-database.json in the tools/ directory
+# No API tokens or external API calls required
 
 feature:
   persistence-enabled: false
@@ -40,6 +32,15 @@ management:
 spring:
   application:
     name: engineering-metrics-service
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true
+          no-store: true
+          must-revalidate: true
+server:
+  port: 8081
 
 info:
   app:

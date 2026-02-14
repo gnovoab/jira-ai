@@ -1,0 +1,19 @@
+# Jira Session Credentials
+# Copy this file to .jira-session and fill in your values
+# DO NOT commit .jira-session to git!
+
+# How to get these values:
+# 1. Open https://gspcloud.atlassian.net in your browser
+# 2. Make sure you're logged in
+# 3. Open DevTools (F12) → Application → Cookies
+# 4. Find and copy these THREE cookie values:
+
+export JIRA_JSESSIONID=YOUR_JSESSIONID_HERE
+export JIRA_ACCOUNT_XSRF_TOKEN=YOUR_ACCOUNT_XSRF_TOKEN_HERE
+export JIRA_TENANT_SESSION_TOKEN=YOUR_TENANT_SESSION_TOKEN_HERE
+
+# Example (DO NOT USE THESE - they're fake):
+# export JIRA_JSESSIONID=A1B2C3D4E5F6G7H8I9J0
+# export JIRA_ACCOUNT_XSRF_TOKEN=abcd1234-5678-90ef-ghij-klmnopqrstuv
+# export JIRA_TENANT_SESSION_TOKEN=xyz9876-4321-abcd-efgh-ijklmnopqrst
+

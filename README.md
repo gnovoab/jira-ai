@@ -1,6 +1,6 @@
 # Engineering Metrics Service
 
-> A Spring Boot service that integrates with Jira Cloud and GitHub to compute comprehensive engineering metrics for sprint-level and developer-level performance analysis.
+> A Spring Boot service that analyzes Jira sprint data to compute comprehensive engineering metrics for sprint-level and developer-level performance analysis.
 
 [![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://www.oracle.com/java/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.2-brightgreen.svg)](https://spring.io/projects/spring-boot)
@@ -30,21 +30,21 @@
 
 ## 🎯 Overview
 
-The **Engineering Metrics Service** is a lightweight, stateless Spring Boot application designed to provide actionable insights into your team's engineering performance. By integrating with Jira Cloud and GitHub, it computes metrics such as:
+The **Engineering Metrics Service** is a lightweight Spring Boot application designed to provide actionable insights into your team's engineering performance. Using file-based Jira data ingestion, it computes metrics such as:
 
 - **QA Failure Rate** - Track quality issues
 - **Velocity** - Measure story points delivered
 - **Bug Density** - Assess code quality
-- **PR Approval Time** - Monitor code review efficiency
-- **Developer Performance** - Individual contributor metrics
+- **Sprint Completion** - Monitor delivery performance
+- **Issue Type Distribution** - Analyze work breakdown
 - **QA Trends** - Historical quality analysis
 
 ### Key Characteristics
 
-- ✅ **No Database** - Fully in-memory with intelligent caching
+- ✅ **File-Based** - No API tokens required, uses browser session authentication
+- ✅ **Sprint Master Database** - Single JSON file with complete sprint data
+- ✅ **In-Memory** - Fast analysis with intelligent caching
 - ✅ **On-Demand** - Metrics computed when requested
-- ✅ **Fast** - Caffeine cache for sub-second responses
-- ✅ **Extensible** - Feature flags for custom persistence
 - ✅ **Clean Architecture** - Layered design for maintainability
 
 ---
@@ -55,24 +55,15 @@ The **Engineering Metrics Service** is a lightweight, stateless Spring Boot appl
 
 - Total issues, stories, and bugs
 - QA failure rate and count
-- Velocity and story delivery percentage
-- Committed vs. delivered story points
-- Bug priority breakdown (P1-P4)
-- Bug density (bugs per story point)
-- PR approval time (average and median)
-
-### Developer Metrics
-
-- Per-developer issue counts
-- Individual QA failure rates
-- Story points delivered per developer
-- Bug counts and priority breakdown
-- Average PR approval time per developer
+- Completion percentage
+- Issue type distribution (Story, Bug, Task, Sub-task)
+- Sprint duration and dates
+- Changelog analysis for QA failures
 
 ### Trend Analysis
 
 - QA failure rate trends over multiple sprints
-- Trend direction (UP, DOWN, STABLE)
+- Sprint-by-sprint comparison
 - Historical sprint data visualization
 
 ---
@@ -126,8 +117,7 @@ The **Engineering Metrics Service** is a lightweight, stateless Spring Boot appl
 
 - **Java 21+** (tested with Java 21)
 - **Gradle 9.3.0+**
-- **Jira Cloud** account with API token
-- **GitHub** Personal Access Token
+- **Browser access to Jira** (for session authentication)
 
 ---
 
@@ -140,25 +130,27 @@ git clone https://github.com/your-org/engineering-metrics-service.git
 cd engineering-metrics-service
 ```
 
-### 2. Configure Credentials
+### 2. Set Up Browser Session
 
-Edit `src/main/resources/application.yml`:
+Create `tools/.jira-session` with your browser cookies:
 
-```yaml
-jira:
-  base-url: https://your-domain.atlassian.net
-  email: your-email@example.com
-  api-token: your-jira-api-token
-  project-key: YOUR_PROJECT
-  story-points-field: customfield_10016
-
-github:
-  token: ghp_your_github_token
-  repo-owner: your-organization
-  repo-name: your-repository
+```bash
+cd tools
+cp .jira-session.template .jira-session
+# Edit .jira-session with your browser cookies
 ```
 
-### 3. Build and Run
+See [Data Fetching Guide](docs/data-fetching/QUICK_REFERENCE.md) for details.
+
+### 3. Fetch Sprint Data
+
+```bash
+cd tools
+source .jira-session
+./add-sprint.sh <sprintId>
+```
+
+### 4. Build and Run
 
 ```bash
 # Build the project
@@ -170,47 +162,39 @@ github:
 
 The service will start on `http://localhost:8080`.
 
-### 4. Test the API
+### 5. Test the API
 
 ```bash
-# Get sprint metrics
-curl "http://localhost:8080/metrics?sprintId=123"
+# Get all sprint summaries
+curl "http://localhost:8080/api/sprints" | jq .
 
-# Get QA trend
-curl "http://localhost:8080/metrics/trend?lastNSprints=5"
+# Get QA analysis
+curl "http://localhost:8080/api/test/qa-analysis/summary" | jq .
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-### Jira Configuration
+### Application Configuration
 
-| Property | Description | Example |
-|----------|-------------|---------|
-| `jira.base-url` | Your Jira Cloud instance URL | `https://mycompany.atlassian.net` |
-| `jira.email` | Email for Basic Auth | `user@example.com` |
-| `jira.api-token` | Jira API token ([create one](https://id.atlassian.com/manage-profile/security/api-tokens)) | `ATATTxxxxx` |
-| `jira.project-key` | Jira project key | `ABC` |
-| `jira.story-points-field` | Custom field ID for story points | `customfield_10016` |
+The application uses file-based data ingestion. No API tokens required!
 
-### GitHub Configuration
+Configuration in `src/main/resources/application.yml`:
 
-| Property | Description | Example |
-|----------|-------------|---------|
-| `github.token` | GitHub Personal Access Token ([create one](https://github.com/settings/tokens)) | `ghp_xxxxx` |
-| `github.repo-owner` | GitHub organization or user | `mycompany` |
-| `github.repo-name` | Repository name | `my-repo` |
+```yaml
+# File-based Jira data ingestion
+# Data is loaded from jira-sprint-database.json in the tools/ directory
+# No API tokens or external API calls required
 
-**Required Scopes for GitHub Token:**
-- `repo` (for private repositories)
-- `public_repo` (for public repositories)
+feature:
+  persistence-enabled: false
+```
 
-### Feature Flags
+### Data Source
 
-| Property | Description | Default |
-|----------|-------------|---------|
-| `feature.persistence-enabled` | Enable/disable persistence | `false` |
+- **Primary**: `tools/jira-sprint-database.json` - Sprint Master Database
+- **Fallback**: `tools/jira-export-*.json` - Individual export files
 
 ---
 
@@ -502,6 +486,22 @@ For questions or issues:
 
 - **Documentation:** See [ENGINEERING_METRICS_SERVICE_SPEC.md](ai/ENGINEERING_METRICS_SERVICE_SPEC.md)
 - **Issues:** Open an issue on GitHub
+
+---
+
+## 📚 Documentation
+
+All documentation is organized in the `/docs` directory:
+
+- **[Setup & Configuration](docs/setup/)** - Initial setup, Jira access, configuration
+- **[Data Fetching](docs/data-fetching/)** - Sprint database, data fetching tools, update strategies
+- **[Analysis & Results](docs/analysis/)** - QA metrics, sprint analysis, findings
+- **[Archive](docs/archive/)** - Historical documentation
+
+**Quick Links:**
+- [Quick Reference](docs/data-fetching/QUICK_REFERENCE.md) - Common commands
+- [Add Sprint Guide](docs/data-fetching/ADD_SPRINT_GUIDE.md) - How to add completed sprints
+- [QA Analysis Results](docs/analysis/QA_ANALYSIS_FIXED_RESULTS.md) - Latest QA metrics
 
 ---
 
