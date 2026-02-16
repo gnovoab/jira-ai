@@ -3,7 +3,11 @@ const Dashboard = {
     currentSlide: 0,
     totalSlides: 4,  // 4 slides with 2 charts each
     chartInstances: {},
-    allIssues: [],   // Store all issues for modals
+    allIssuesOriginal: [],  // Store all issues (unfiltered)
+    allIssues: [],   // Store filtered issues for modals
+    allSprintsData: [],  // Store all sprints (unfiltered)
+    filteredSprintsData: [],  // Store filtered sprints
+    fromSprintIndex: 0,  // Starting sprint index (0 = all)
 
     async render(container) {
         try {
@@ -14,24 +18,58 @@ const Dashboard = {
                 API.getDatabaseStatus()
             ]);
 
+            // Sort sprints by date for consistent ordering
+            const sortedSprints = [...sprints].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+
+            // Store all sprints (unfiltered)
+            this.allSprintsData = sortedSprints;
+            this.filteredSprintsData = sortedSprints;
+            this.sprintsData = sortedSprints;
+
             // Fetch all issues from all sprints for team member charts
-            const issuePromises = sprints.map(s => API.getSprintIssues(s.sprintName).catch(() => []));
+            const issuePromises = sortedSprints.map(s => API.getSprintIssues(s.sprintName).catch(() => []));
             const issueArrays = await Promise.all(issuePromises);
-            this.allIssues = issueArrays.flat();
+            // Store issues with sprint name for filtering
+            this.allIssuesOriginal = issueArrays.flatMap((issues, i) =>
+                issues.map(issue => ({ ...issue, _sprintName: sortedSprints[i].sprintName }))
+            );
+            this.allIssues = this.allIssuesOriginal;
 
-            // Store sprints for chart rendering
-            this.sprintsData = sprints;
-
-            // Calculate total issues from all sprints
-            const totalIssuesCount = sprints.reduce((sum, s) => sum + (s.totalIssues || 0), 0);
+            // Calculate total issues from filtered sprints
+            const totalIssuesCount = sortedSprints.reduce((sum, s) => sum + (s.totalIssues || 0), 0);
 
             const html = `
+                <!-- Sprint Range Filter -->
+                <div class="bg-white rounded-lg shadow-sm p-4 mb-6 card">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-filter text-gray-500"></i>
+                            <span class="text-sm font-medium text-gray-700">Data Range:</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm text-gray-600">From:</label>
+                            <select id="from-sprint-select" onchange="Dashboard.applySprintFilter()"
+                                    class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="0">All Sprints (Beginning)</option>
+                                ${sortedSprints.map((s, i) => `<option value="${i}">${s.sprintName.replace('Calandria ', '')}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm text-gray-600">To:</label>
+                            <select id="to-sprint-select" onchange="Dashboard.applySprintFilter()"
+                                    class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                ${sortedSprints.map((s, i) => `<option value="${i}" ${i === sortedSprints.length - 1 ? 'selected' : ''}>${s.sprintName.replace('Calandria ', '')}</option>`).join('')}
+                            </select>
+                        </div>
+                        <span id="sprint-range-info" class="text-sm text-gray-500 ml-auto">
+                            Showing ${sortedSprints.length} sprints
+                        </span>
+                    </div>
+                </div>
+
                 <!-- Stats Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                    ${this.renderStatCard('Total Sprints', sprints.length, 'fas fa-running', 'stat-card')}
-                    ${this.renderStatCard('Total Issues', totalIssuesCount, 'fas fa-tasks', 'stat-card-success')}
-                    ${this.renderStatCard('QA Failure Rate', `${(qaSummary.overallQaFailureRate || 0).toFixed(1)}%`, 'fas fa-bug', 'stat-card-warning')}
-                    ${this.renderStatCard('Tested Issues', qaSummary.totalQaTested || 0, 'fas fa-check-circle', 'stat-card-danger')}
+                <div id="stats-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    ${this.renderStatsCards(sortedSprints, qaSummary)}
                 </div>
 
                 <!-- Charts Carousel - 2 charts visible at a time -->
@@ -42,7 +80,7 @@ const Dashboard = {
                             <button onclick="Dashboard.prevSlide()" class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">
                                 <i class="fas fa-chevron-left text-gray-600"></i>
                             </button>
-                            <span id="carousel-indicator" class="text-sm text-gray-500 min-w-[60px] text-center">1 / 3</span>
+                            <span id="carousel-indicator" class="text-sm text-gray-500 min-w-[60px] text-center">1 / 4</span>
                             <button onclick="Dashboard.nextSlide()" class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">
                                 <i class="fas fa-chevron-right text-gray-600"></i>
                             </button>
@@ -149,21 +187,116 @@ const Dashboard = {
                             View Details <i class="fas fa-arrow-right ml-1"></i>
                         </a>
                     </div>
-                    ${this.renderTopFailures(sprints)}
+                    ${this.renderTopFailures(sortedSprints)}
                 </div>
             `;
-            
+
             container.innerHTML = html;
 
             // Render all carousel charts after DOM is updated
             setTimeout(() => {
-                this.renderAllCarouselCharts(sprints);
+                this.renderAllCarouselCharts(sortedSprints);
             }, 100);
 
         } catch (error) {
             console.error('Dashboard render error:', error);
             throw error;
         }
+    },
+
+    // Render stats cards (extracted for reuse)
+    renderStatsCards(sprints, qaSummary) {
+        const totalIssuesCount = sprints.reduce((sum, s) => sum + (s.totalIssues || 0), 0);
+        const avgQaFailure = qaSummary ? (qaSummary.overallQaFailureRate || 0) :
+            (sprints.reduce((sum, s) => sum + (s.qaFailureRatio || 0), 0) / sprints.length);
+        const totalQaTested = qaSummary ? (qaSummary.totalQaTested || 0) :
+            sprints.reduce((sum, s) => sum + (s.totalIssues || 0), 0);
+
+        return `
+            ${this.renderStatCard('Total Sprints', sprints.length, 'fas fa-running', 'stat-card')}
+            ${this.renderStatCard('Total Issues', totalIssuesCount, 'fas fa-tasks', 'stat-card-success')}
+            ${this.renderStatCard('QA Failure Rate', `${avgQaFailure.toFixed(1)}%`, 'fas fa-bug', 'stat-card-warning')}
+            ${this.renderStatCard('Tested Issues', totalQaTested, 'fas fa-check-circle', 'stat-card-danger')}
+        `;
+    },
+
+    // Apply sprint range filter
+    applySprintFilter() {
+        const fromSelect = document.getElementById('from-sprint-select');
+        const toSelect = document.getElementById('to-sprint-select');
+
+        if (!fromSelect || !toSelect || !this.allSprintsData) return;
+
+        let fromIndex = parseInt(fromSelect.value);
+        let toIndex = parseInt(toSelect.value);
+
+        // Ensure from <= to
+        if (fromIndex > toIndex) {
+            toIndex = fromIndex;
+            toSelect.value = toIndex;
+        }
+
+        // Filter sprints
+        this.filteredSprintsData = this.allSprintsData.slice(fromIndex, toIndex + 1);
+        this.sprintsData = this.filteredSprintsData;
+
+        // Filter issues to match filtered sprints
+        const filteredSprintNames = new Set(this.filteredSprintsData.map(s => s.sprintName));
+        this.allIssues = this.allIssuesOriginal.filter(issue => filteredSprintNames.has(issue._sprintName));
+
+        // Update info text
+        const infoSpan = document.getElementById('sprint-range-info');
+        if (infoSpan) {
+            if (fromIndex === 0 && toIndex === this.allSprintsData.length - 1) {
+                infoSpan.textContent = `Showing all ${this.filteredSprintsData.length} sprints`;
+            } else {
+                infoSpan.textContent = `Showing ${this.filteredSprintsData.length} of ${this.allSprintsData.length} sprints`;
+            }
+        }
+
+        // Update stats cards
+        const statsContainer = document.getElementById('stats-cards');
+        if (statsContainer) {
+            // Calculate filtered QA summary
+            const avgQaFailure = this.filteredSprintsData.reduce((sum, s) => sum + (s.qaFailureRatio || 0), 0) / this.filteredSprintsData.length;
+            statsContainer.innerHTML = this.renderStatsCards(this.filteredSprintsData, {
+                overallQaFailureRate: avgQaFailure,
+                totalQaTested: this.filteredSprintsData.reduce((sum, s) => sum + (s.totalIssues || 0), 0)
+            });
+        }
+
+        // Update sprint summary dropdown options
+        const summarySelect = document.getElementById('summary-sprint-select');
+        if (summarySelect) {
+            summarySelect.innerHTML = `
+                <option value="all">All Sprints</option>
+                ${this.filteredSprintsData.map(s => `<option value="${s.sprintId}">${s.sprintName}</option>`).join('')}
+            `;
+        }
+
+        // Update sprint summary content
+        const summaryContent = document.getElementById('sprint-summary-content');
+        if (summaryContent) {
+            summaryContent.innerHTML = this.renderSprintSummaryCards(this.filteredSprintsData, 'all');
+        }
+
+        // Update recent sprints table
+        const recentTable = document.querySelector('.overflow-x-auto');
+        if (recentTable) {
+            recentTable.innerHTML = this.renderSprintsTable(this.filteredSprintsData.slice(-5).reverse());
+        }
+
+        // Update top failures
+        const topFailuresContainer = document.querySelector('.bg-white.rounded-lg.shadow-sm.p-6.card.mt-6');
+        if (topFailuresContainer) {
+            const failuresContent = topFailuresContainer.querySelector('div:last-child');
+            if (failuresContent && failuresContent.classList.contains('space-y-3')) {
+                failuresContent.outerHTML = this.renderTopFailures(this.filteredSprintsData);
+            }
+        }
+
+        // Re-render charts with filtered data
+        this.renderAllCarouselCharts(this.filteredSprintsData);
     },
 
     // Carousel Navigation
