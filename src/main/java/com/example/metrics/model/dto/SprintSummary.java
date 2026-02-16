@@ -21,6 +21,12 @@ public record SprintSummary(
         double qaFailureRatio,
         int totalPRs,
         int prsWithBlockingComments,
-        double prBlockingRate
+        double prBlockingRate,
+        // New delivery metrics
+        int devDeliveredStories,      // Stories that reached QA or beyond (dev finished)
+        double devDeliveryPercentage,
+        int qaDeliveredStories,       // Stories that reached Done (QA finished)
+        double qaDeliveryPercentage,
+        int inProgressIssues
 ) {
 }

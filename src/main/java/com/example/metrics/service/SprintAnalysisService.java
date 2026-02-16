@@ -1,5 +1,6 @@
 package com.example.metrics.service;
 
+import com.example.metrics.model.dto.IssueDetail;
 import com.example.metrics.model.dto.SprintInfo;
 import com.example.metrics.model.dto.SprintSummary;
 import com.example.metrics.model.jira.Issue;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,10 +39,13 @@ public class SprintAnalysisService {
         Map<String, List<Issue>> issuesBySprint = groupIssuesBySprint(allIssues);
         
         // Calculate summary for each sprint
+        // Sort by end date descending (most recent first), then by sprint name descending as fallback
         return issuesBySprint.entrySet().stream()
             .map(entry -> calculateSprintSummary(entry.getKey(), entry.getValue()))
             .filter(Objects::nonNull)
-            .sorted(Comparator.comparing(SprintSummary::sprintName))
+            .sorted(Comparator
+                .comparing(SprintSummary::endDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(SprintSummary::sprintName, Comparator.reverseOrder()))
             .collect(Collectors.toList());
     }
     
@@ -49,10 +54,50 @@ public class SprintAnalysisService {
         List<Issue> sprintIssues = allIssues.stream()
             .filter(issue -> belongsToSprint(issue, sprintName))
             .collect(Collectors.toList());
-        
+
         return calculateSprintSummary(sprintName, sprintIssues);
     }
-    
+
+    /**
+     * Get all issues for a sprint with details for UI display.
+     * Deduplicates by issue key to avoid showing the same issue multiple times.
+     */
+    public List<IssueDetail> getSprintIssues(String sprintName) throws IOException {
+        List<Issue> allIssues = dataSourceManager.fetchIssues(null);
+
+        // Use LinkedHashMap to preserve order while deduplicating by key
+        Map<String, Issue> uniqueIssues = new LinkedHashMap<>();
+        allIssues.stream()
+            .filter(issue -> belongsToSprint(issue, sprintName))
+            .forEach(issue -> uniqueIssues.putIfAbsent(issue.getKey(), issue));
+
+        return uniqueIssues.values().stream()
+            .map(this::toIssueDetail)
+            .sorted(Comparator.comparing(IssueDetail::issueType)
+                .thenComparing(IssueDetail::key))
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Convert Issue to IssueDetail DTO.
+     */
+    private IssueDetail toIssueDetail(Issue issue) {
+        String key = issue.getKey();
+        String summary = issue.getFields() != null ? issue.getFields().getSummary() : "";
+        String issueType = issue.getFields() != null && issue.getFields().getIssuetype() != null
+            ? issue.getFields().getIssuetype().getName() : "Unknown";
+        String status = issue.getFields() != null && issue.getFields().getStatus() != null
+            ? issue.getFields().getStatus().getName() : "Unknown";
+        String priority = issue.getFields() != null && issue.getFields().getPriority() != null
+            ? issue.getFields().getPriority().getName() : "None";
+        String assignee = issue.getFields() != null && issue.getFields().getAssignee() != null
+            ? issue.getFields().getAssignee().getDisplayName() : "Unassigned";
+        boolean devDelivered = hasReachedQaOrBeyond(issue);
+        boolean qaDelivered = hasReachedDone(issue);
+
+        return new IssueDetail(key, summary, issueType, status, priority, assignee, devDelivered, qaDelivered);
+    }
+
     private Map<String, List<Issue>> groupIssuesBySprint(List<Issue> issues) {
         Map<String, List<Issue>> grouped = new HashMap<>();
 
@@ -152,12 +197,24 @@ public class SprintAnalysisService {
         int prsWithBlockingComments = 0;
         double prBlockingRate = 0.0;
 
-        // TODO: Implement PR metrics when GitHub integration is available
-        // Would need to:
-        // 1. Extract Jira issue keys from issues list
-        // 2. Fetch PRs from GitHub that reference these issue keys
-        // 3. Check reviews for CHANGES_REQUESTED state
-        // 4. Calculate blocking rate
+        // Calculate Dev Delivery (stories that reached QA or beyond - dev finished coding)
+        int devDeliveredStories = (int) issues.stream()
+            .filter(this::isStory)
+            .filter(this::hasReachedQaOrBeyond)
+            .count();
+        double devDeliveryPercentage = totalStories == 0 ? 0 : (devDeliveredStories * 100.0) / totalStories;
+
+        // Calculate QA Delivery (stories that reached Done - QA finished testing)
+        int qaDeliveredStories = (int) issues.stream()
+            .filter(this::isStory)
+            .filter(this::hasReachedDone)
+            .count();
+        double qaDeliveryPercentage = totalStories == 0 ? 0 : (qaDeliveredStories * 100.0) / totalStories;
+
+        // Calculate In Progress issues
+        int inProgressIssues = (int) issues.stream()
+            .filter(this::isInProgress)
+            .count();
 
         return new SprintSummary(
             sprintName,
@@ -180,7 +237,12 @@ public class SprintAnalysisService {
             qaFailureRatio,
             totalPRs,
             prsWithBlockingComments,
-            prBlockingRate
+            prBlockingRate,
+            devDeliveredStories,
+            devDeliveryPercentage,
+            qaDeliveredStories,
+            qaDeliveryPercentage,
+            inProgressIssues
         );
     }
     
@@ -263,13 +325,98 @@ public class SprintAnalysisService {
         if (issue.getChangelog() == null || issue.getChangelog().getHistories() == null) {
             return false;
         }
-        
+
         return issue.getChangelog().getHistories().stream()
             .flatMap(history -> history.getItems().stream())
             .anyMatch(item -> "status".equalsIgnoreCase(item.getField())
                 && item.getToString() != null
-                && (item.getToString().contains("QA Failed") 
+                && (item.getToString().contains("QA Failed")
                     || item.getToString().contains("Failed QA")
                     || item.getToString().contains("Rejected")));
+    }
+
+    /**
+     * Dev Delivery: Check if issue has reached QA or beyond (dev finished coding).
+     * Statuses: QA, Ready for Test, Ready for merge, Monitoring, Completed
+     */
+    private boolean hasReachedQaOrBeyond(Issue issue) {
+        // Check current status
+        if (issue.getFields() != null && issue.getFields().getStatus() != null) {
+            String currentStatus = issue.getFields().getStatus().getName();
+            if (isQaOrBeyondStatus(currentStatus)) {
+                return true;
+            }
+        }
+
+        // Check changelog for any transition to QA or beyond
+        if (issue.getChangelog() != null && issue.getChangelog().getHistories() != null) {
+            return issue.getChangelog().getHistories().stream()
+                .flatMap(history -> history.getItems().stream())
+                .anyMatch(item -> "status".equalsIgnoreCase(item.getField())
+                    && item.getToString() != null
+                    && isQaOrBeyondStatus(item.getToString()));
+        }
+
+        return false;
+    }
+
+    private boolean isQaOrBeyondStatus(String status) {
+        if (status == null) return false;
+        return "QA".equalsIgnoreCase(status)
+            || "Ready for Test".equalsIgnoreCase(status)
+            || "Ready for merge".equalsIgnoreCase(status)
+            || "Monitoring".equalsIgnoreCase(status)
+            || "Completed".equalsIgnoreCase(status)
+            || "Done".equalsIgnoreCase(status)
+            || "Closed".equalsIgnoreCase(status);
+    }
+
+    /**
+     * QA Delivery: Check if issue has reached Done (QA finished testing).
+     * Statuses: Completed, Ready for merge, Monitoring, Done, Closed
+     */
+    private boolean hasReachedDone(Issue issue) {
+        // Check current status
+        if (issue.getFields() != null && issue.getFields().getStatus() != null) {
+            String currentStatus = issue.getFields().getStatus().getName();
+            if (isDoneStatus(currentStatus)) {
+                return true;
+            }
+        }
+
+        // Check changelog for any transition to Done
+        if (issue.getChangelog() != null && issue.getChangelog().getHistories() != null) {
+            return issue.getChangelog().getHistories().stream()
+                .flatMap(history -> history.getItems().stream())
+                .anyMatch(item -> "status".equalsIgnoreCase(item.getField())
+                    && item.getToString() != null
+                    && isDoneStatus(item.getToString()));
+        }
+
+        return false;
+    }
+
+    private boolean isDoneStatus(String status) {
+        if (status == null) return false;
+        return "Completed".equalsIgnoreCase(status)
+            || "Ready for merge".equalsIgnoreCase(status)
+            || "Monitoring".equalsIgnoreCase(status)
+            || "Done".equalsIgnoreCase(status)
+            || "Closed".equalsIgnoreCase(status);
+    }
+
+    /**
+     * Check if issue is currently in progress (not done, not in backlog).
+     */
+    private boolean isInProgress(Issue issue) {
+        if (issue.getFields() == null || issue.getFields().getStatus() == null) {
+            return false;
+        }
+        String status = issue.getFields().getStatus().getName();
+        return "In Progress".equalsIgnoreCase(status)
+            || "In Review".equalsIgnoreCase(status)
+            || "QA".equalsIgnoreCase(status)
+            || "Ready for Test".equalsIgnoreCase(status)
+            || "Blocked".equalsIgnoreCase(status);
     }
 }

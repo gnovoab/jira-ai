@@ -47,7 +47,19 @@ const App = {
                     pageSubtitle.textContent = 'Overview of sprint metrics and QA performance';
                     await Dashboard.render(mainContent);
                     break;
-                    
+
+                case 'sprint-overview':
+                    pageTitle.textContent = 'Sprint Overview';
+                    pageSubtitle.textContent = 'Detailed overview of individual sprint metrics';
+                    await SprintOverview.render(mainContent);
+                    break;
+
+                case 'fix-version-overview':
+                    pageTitle.textContent = 'Fix Versions';
+                    pageSubtitle.textContent = 'Release version metrics and QA analysis';
+                    await FixVersionOverview.render(mainContent);
+                    break;
+
                 case 'sprints':
                     pageTitle.textContent = 'Sprints';
                     pageSubtitle.textContent = 'Detailed sprint analysis and metrics';

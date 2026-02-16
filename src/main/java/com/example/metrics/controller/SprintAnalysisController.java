@@ -1,5 +1,6 @@
 package com.example.metrics.controller;
 
+import com.example.metrics.model.dto.IssueDetail;
 import com.example.metrics.model.dto.SprintSummary;
 import com.example.metrics.service.SprintAnalysisService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,6 +48,18 @@ public class SprintAnalysisController {
             return ResponseEntity.ok(summary);
         } catch (IOException e) {
             log.error("Error fetching sprint summary for: {}", sprintName, e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/{sprintName}/issues")
+    @Operation(summary = "Get all issues for a specific sprint")
+    public ResponseEntity<List<IssueDetail>> getSprintIssues(@PathVariable String sprintName) {
+        try {
+            List<IssueDetail> issues = sprintAnalysisService.getSprintIssues(sprintName);
+            return ResponseEntity.ok(issues);
+        } catch (IOException e) {
+            log.error("Error fetching sprint issues for: {}", sprintName, e);
             return ResponseEntity.internalServerError().build();
         }
     }
