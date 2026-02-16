@@ -1,8 +1,8 @@
 # Engineering Metrics Service
 
-> A Spring Boot service that analyzes Jira sprint data to compute comprehensive engineering metrics for sprint-level and developer-level performance analysis.
+> A Spring Boot service with a modern web UI that analyzes Jira sprint data to compute comprehensive engineering metrics for sprint-level and developer-level performance analysis.
 
-[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://www.oracle.com/java/)
+[![Java](https://img.shields.io/badge/Java-21+-orange.svg)](https://www.oracle.com/java/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.2-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Gradle](https://img.shields.io/badge/Gradle-9.3.0-blue.svg)](https://gradle.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -13,6 +13,7 @@
 
 - [Overview](#-overview)
 - [Features](#-features)
+- [Web UI](#-web-ui)
 - [Architecture](#-architecture)
 - [Prerequisites](#-prerequisites)
 - [Quick Start](#-quick-start)
@@ -30,7 +31,7 @@
 
 ## 🎯 Overview
 
-The **Engineering Metrics Service** is a lightweight Spring Boot application designed to provide actionable insights into your team's engineering performance. Using file-based Jira data ingestion, it computes metrics such as:
+The **Engineering Metrics Service** is a Spring Boot application with a modern web dashboard designed to provide actionable insights into your team's engineering performance. Using file-based Jira data ingestion, it computes metrics such as:
 
 - **QA Failure Rate** - Track quality issues
 - **Velocity** - Measure story points delivered
@@ -38,11 +39,13 @@ The **Engineering Metrics Service** is a lightweight Spring Boot application des
 - **Sprint Completion** - Monitor delivery performance
 - **Issue Type Distribution** - Analyze work breakdown
 - **QA Trends** - Historical quality analysis
+- **Team Member Performance** - Cards assigned and delivered per developer
 
 ### Key Characteristics
 
+- ✅ **Modern Web UI** - Interactive dashboard with charts and modals
 - ✅ **File-Based** - No API tokens required, uses browser session authentication
-- ✅ **Sprint Master Database** - Single JSON file with complete sprint data
+- ✅ **Sprint Master Database** - Single JSON file with complete sprint data (10 sprints, 484 issues)
 - ✅ **In-Memory** - Fast analysis with intelligent caching
 - ✅ **On-Demand** - Metrics computed when requested
 - ✅ **Clean Architecture** - Layered design for maintainability
@@ -53,10 +56,10 @@ The **Engineering Metrics Service** is a lightweight Spring Boot application des
 
 ### Sprint Metrics
 
-- Total issues, stories, and bugs
+- Total issues, stories, bugs, tasks, and sub-tasks
 - QA failure rate and count
-- Completion percentage
-- Issue type distribution (Story, Bug, Task, Sub-task)
+- Completion percentage (Dev and QA delivery rates)
+- Issue type distribution with stacked charts
 - Sprint duration and dates
 - Changelog analysis for QA failures
 
@@ -65,51 +68,92 @@ The **Engineering Metrics Service** is a lightweight Spring Boot application des
 - QA failure rate trends over multiple sprints
 - Sprint-by-sprint comparison
 - Historical sprint data visualization
+- Team member performance trends
+
+### Interactive Features
+
+- Clickable charts with drill-down modals
+- Search, filter, and sort on issue tables
+- Jira links for all issues
+- Sprint and Fix Version grouping
+
+---
+
+## 🖥️ Web UI
+
+The application includes a modern single-page application (SPA) built with:
+- **Tailwind CSS** - Utility-first styling
+- **Chart.js** - Interactive charts
+- **Font Awesome** - Icons
+
+### Pages
+
+| Page | Description |
+|------|-------------|
+| **Dashboard** | Overview with charts carousel (8 charts), Sprint Summary with clickable cards |
+| **Sprint Overview** | Detailed sprint metrics, issue breakdown, work distribution by team member |
+| **Fix Versions** | Metrics grouped by release version (2.40, 2.41, etc.) |
+| **Sprints** | Sprint list with comparison features |
+| **QA Analysis** | QA failure analysis and trends |
+| **Trends** | Historical performance trends |
+| **Database** | Sprint database status, Jira fetch with session credentials |
+| **Debug Tools** | Advanced debugging and data inspection |
+
+### Dashboard Features
+
+- **Charts Carousel** (4 slides, 8 charts):
+  - Total Cards in Sprint (stacked by type) - Clickable!
+  - Cards Delivered per Sprint
+  - Sprint Completion Rate
+  - QA Failure Trend
+  - Bug Count per Sprint
+  - Dev vs QA Delivery Rate
+  - Cards Assigned per Team Member
+  - Cards Delivered per Team Member
+
+- **Sprint Summary** (clickable cards):
+  - Total Delivered → Shows delivered cards with Jira links
+  - Completion Rate → Shows completed (green) and pending (pulse animation) cards
+  - QA Failure Rate → Shows QA failed cards
+  - Total Bugs → Shows all bugs
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │ HTTP
-       ▼
-┌─────────────────────────────────────┐
-│      MetricsController              │
-│  (REST API Layer)                   │
-└──────┬──────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────┐
-│   Service Layer                     │
-│  - SprintMetricsService             │
-│  - TrendService                     │
-│  - DeveloperMetricsService          │
-└──────┬──────────────────────────────┘
-       │
-       ├──────────────┬─────────────────┐
-       ▼              ▼                 ▼
-┌──────────┐   ┌──────────┐   ┌──────────────┐
-│  Jira    │   │ GitHub   │   │ Metrics      │
-│ Service  │   │ Service  │   │ Calculator   │
-└──────────┘   └──────────┘   └──────────────┘
-       │              │
-       ▼              ▼
-┌──────────┐   ┌──────────┐
-│   Jira   │   │  GitHub  │
-│   API    │   │   API    │
-└──────────┘   └──────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     Web Browser (SPA)                        │
+│  Dashboard │ Sprint Overview │ Fix Versions │ Database      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ HTTP/REST
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    REST Controllers                          │
+│  SprintAnalysisController │ FixVersionController │ Admin    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Service Layer                            │
+│  SprintAnalysisService │ FixVersionAnalysisService          │
+│  JiraFetchService │ DataImportService                       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Sprint Master Database (JSON)                   │
+│              tools/jira-sprint-database.json                 │
+│              10 sprints │ 484 issues                         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Layers
 
-1. **Controller** - REST endpoints
-2. **Service** - Business logic and orchestration
-3. **Calculator** - Pure computation logic
-4. **Integration** - External API calls (Jira, GitHub)
-5. **Model** - DTOs and domain models
+1. **Web UI** - Single-page application (Tailwind CSS, Chart.js)
+2. **Controller** - REST endpoints for sprints, fix versions, admin
+3. **Service** - Business logic, analysis, and data processing
+4. **Data** - File-based JSON database with sprint data
 
 ---
 
@@ -200,108 +244,92 @@ feature:
 
 ## 📚 API Documentation
 
-### Endpoint 1: Get Sprint Metrics
+The service runs on `http://localhost:8081` by default.
 
-**GET** `/metrics`
+### Sprint Endpoints
 
-Retrieves comprehensive metrics for a specific sprint.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sprints` | GET | Get all sprint summaries |
+| `/api/sprints/{sprintName}/issues` | GET | Get all issues for a sprint |
 
-#### Request
+### Fix Version Endpoints
 
-**Query Parameters:**
-- `sprintId` (required, string) - Sprint identifier
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/fix-versions` | GET | Get all fix version summaries |
+| `/api/fix-versions/{version}/issues` | GET | Get all issues for a fix version |
 
-**Example:**
+### QA Analysis Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/test/qa-analysis/summary` | GET | Get QA analysis summary |
+| `/api/test/sprint-database/status` | GET | Get database status |
+
+### Admin Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/fetch` | POST | Fetch data from Jira using session credentials |
+| `/api/admin/status` | GET | Get database and fetch status |
+
+### Example: Get All Sprints
+
 ```bash
-curl "http://localhost:8080/metrics?sprintId=123"
+curl "http://localhost:8081/api/sprints" | jq .
 ```
 
-#### Response
-
-**Status:** `200 OK`
-
-**Body:**
+**Response:**
 ```json
-{
-  "sprintMetrics": {
-    "sprintId": "123",
-    "totalIssues": 45,
-    "qaFailures": 3,
-    "qaFailureRate": 6.67,
-    "totalStories": 20,
-    "deliveredStories": 18,
-    "deliveredPercentage": 90.0,
-    "velocity": 55.0,
-    "committedStoryPoints": 60.0,
-    "completionRate": 91.67,
-    "totalBugs": 8,
-    "p1Bugs": 1,
-    "p2Bugs": 3,
-    "p3Bugs": 3,
-    "p4Bugs": 1,
-    "bugDensity": 0.145,
-    "averagePrApprovalHours": 4.5,
-    "medianPrApprovalHours": 3.2
-  },
-  "developerMetrics": [
-    {
-      "developerName": "John Doe",
-      "totalIssues": 12,
-      "qaFailures": 1,
-      "qaFailureRate": 8.33,
-      "storyPointsDelivered": 21.0,
-      "totalBugs": 2,
-      "p1Bugs": 0,
-      "p2Bugs": 1,
-      "p3Bugs": 1,
-      "p4Bugs": 0,
-      "averagePrApprovalHours": 3.8
-    }
-  ]
-}
+[
+  {
+    "sprintName": "Calandria Sprint 8",
+    "sprintId": "82346",
+    "startDate": "2026-02-09T11:26:12.151Z",
+    "endDate": "2026-02-23T11:26:12.151Z",
+    "totalIssues": 52,
+    "completedIssues": 28,
+    "completionPercentage": 53.8,
+    "totalStories": 15,
+    "totalBugs": 12,
+    "totalTasks": 8,
+    "qaFailed": 5,
+    "qaFailureRatio": 9.6,
+    "devDeliveryPercentage": 65.4,
+    "qaDeliveryPercentage": 53.8
+  }
+]
 ```
 
-### Endpoint 2: Get QA Trend
+### Example: Get Sprint Issues
 
-**GET** `/metrics/trend`
-
-Analyzes QA failure rate trends over multiple sprints.
-
-#### Request
-
-**Query Parameters:**
-- `lastNSprints` (required, integer) - Number of recent sprints to analyze (max: 10)
-
-**Example:**
 ```bash
-curl "http://localhost:8080/metrics/trend?lastNSprints=5"
+curl "http://localhost:8081/api/sprints/Calandria%20Sprint%208/issues" | jq .
 ```
 
-#### Response
-
-**Status:** `200 OK`
-
-**Body:**
+**Response:**
 ```json
-{
-  "trendDirection": "DOWN",
-  "changePercentage": -8.5,
-  "averageFailureRate": 7.2,
-  "latestFailureRate": 4.5,
-  "sprintQaData": [
-    {"sprintId": "119", "failureRate": 13.0},
-    {"sprintId": "120", "failureRate": 9.5},
-    {"sprintId": "121", "failureRate": 6.8},
-    {"sprintId": "122", "failureRate": 5.2},
-    {"sprintId": "123", "failureRate": 4.5}
-  ]
-}
+[
+  {
+    "key": "CAL-1234",
+    "summary": "Implement user authentication",
+    "issueType": "Story",
+    "status": "Done",
+    "priority": "High",
+    "assignee": "John Doe",
+    "devDelivered": true,
+    "qaDelivered": true
+  }
+]
 ```
 
-**Trend Direction:**
-- `UP` - QA failure rate increased by >5%
-- `DOWN` - QA failure rate decreased by >5%
-- `STABLE` - QA failure rate changed by ≤5%
+### Legacy Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/metrics?sprintId={id}` | GET | Get sprint metrics (legacy) |
+| `/metrics/trend?lastNSprints={n}` | GET | Get QA trend analysis (legacy)
 
 ---
 
@@ -384,10 +412,11 @@ curl "http://localhost:8080/metrics/trend?lastNSprints=5"
 Create a `Dockerfile`:
 
 ```dockerfile
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY build/libs/*.jar app.jar
-EXPOSE 8080
+COPY tools/jira-sprint-database.json tools/
+EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
 
@@ -401,16 +430,10 @@ Build and run:
 docker build -t engineering-metrics-service .
 
 # Run container
-docker run -p 8080:8080 \
-  -e JIRA_BASE_URL=https://mycompany.atlassian.net \
-  -e JIRA_EMAIL=user@example.com \
-  -e JIRA_API_TOKEN=xxxxx \
-  -e JIRA_PROJECT_KEY=ABC \
-  -e GITHUB_TOKEN=ghp_xxxxx \
-  -e GITHUB_REPO_OWNER=mycompany \
-  -e GITHUB_REPO_NAME=my-repo \
-  engineering-metrics-service
+docker run -p 8081:8081 engineering-metrics-service
 ```
+
+Access the dashboard at `http://localhost:8081`
 
 ---
 
@@ -418,37 +441,49 @@ docker run -p 8080:8080 \
 
 ### Common Issues
 
-#### 1. "401 Unauthorized" from Jira
+#### 1. Page shows "Total Issues undefined"
 
-**Cause:** Invalid Jira credentials
-
-**Solution:**
-- Verify `jira.email` and `jira.api-token` in `application.yml`
-- Ensure API token is valid (regenerate if needed)
-
-#### 2. "404 Not Found" from Jira
-
-**Cause:** Invalid sprint ID or project key
+**Cause:** Data not loaded properly
 
 **Solution:**
-- Verify sprint ID exists in Jira
-- Check `jira.project-key` matches your Jira project
+- Ensure `tools/jira-sprint-database.json` exists and contains valid data
+- Check browser console for API errors
+- Hard refresh the page (Cmd+Shift+R)
 
-#### 3. "403 Forbidden" from GitHub
+#### 2. Charts not rendering
 
-**Cause:** GitHub rate limit exceeded or invalid token
-
-**Solution:**
-- Check GitHub token has required scopes (`repo` or `public_repo`)
-- Wait for rate limit to reset (5000 requests/hour)
-
-#### 4. Incorrect Story Points
-
-**Cause:** Wrong custom field ID
+**Cause:** Chart.js not loaded or data format issue
 
 **Solution:**
-- Find correct field ID in Jira (inspect issue JSON)
-- Update `jira.story-points-field` in `application.yml`
+- Check browser console for JavaScript errors
+- Verify the API returns valid JSON data
+- Clear browser cache and reload
+
+#### 3. Jira fetch fails with 401
+
+**Cause:** Session cookies expired
+
+**Solution:**
+- Get fresh cookies from browser DevTools
+- Update JSESSIONID, account XSRF token, and tenant session token
+- Use the Database page to enter new credentials
+
+#### 4. Server won't start
+
+**Cause:** Port 8081 already in use
+
+**Solution:**
+```bash
+# Find process using port 8081
+lsof -i :8081
+
+# Kill the process
+kill -9 <PID>
+
+# Or change port in application.yml
+server:
+  port: 8082
+```
 
 ### Debugging
 
@@ -462,30 +497,9 @@ logging:
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
----
-
 ## 📄 License
 
 This project is licensed under the MIT License.
-
----
-
-## 📞 Support
-
-For questions or issues:
-
-- **Documentation:** See [ENGINEERING_METRICS_SERVICE_SPEC.md](ai/ENGINEERING_METRICS_SERVICE_SPEC.md)
-- **Issues:** Open an issue on GitHub
 
 ---
 
@@ -507,12 +521,15 @@ All documentation is organized in the `/docs` directory:
 
 ## 🙏 Acknowledgments
 
-- **Spring Boot** - Application framework
+- **Spring Boot 3.4.2** - Application framework
+- **Tailwind CSS** - UI styling
+- **Chart.js** - Interactive charts
+- **Font Awesome** - Icons
 - **Caffeine** - High-performance caching
-- **Jira Cloud** - Issue tracking integration
-- **GitHub** - Code review integration
 
 ---
 
 **Built with ❤️ by the Engineering Team**
+
+**Last Updated:** 2026-02-16
 
